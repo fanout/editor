@@ -1,3 +1,9 @@
 Django==1.10.4
+PyJWT==1.4.2
 argparse==1.2.1
+django-dotenv==1.4.1
+django-grip==1.7.0
+gripcontrol==2.4.2
+pubcontrol==2.2.7
+requests==2.12.4
 wsgiref==0.1.2

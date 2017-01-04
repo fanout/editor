@@ -1,7 +1,11 @@
 import json
+import urlparse
 from django.db import transaction, IntegrityError
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import render, get_object_or_404
+from django.urls import reverse
+from gripcontrol import HttpStreamFormat
+from django_grip import publish
 from text_operation import TextOperation
 from models import User, Document, DocumentChange
 
@@ -15,6 +19,9 @@ def _doc_get_or_create(eid):
 		except IntegrityError:
 			doc = Document.objects.get(eid=eid)
 	return doc
+
+def index(request):
+	return render(request, 'editor/index.html', {'user_id': request.GET['user-id']})
 
 def users(request):
 	if request.method == 'POST':
@@ -51,9 +58,14 @@ def document(request, document_id):
 def document_changes(request, document_id):
 	if request.method == 'GET':
 		sse = False
-		accept = request.META.get('HTTP_ACCEPT')
-		if accept and accept.find('text/event-stream') != -1:
+		if request.GET.get('sse') == 'true':
 			sse = True
+		else:
+			accept = request.META.get('HTTP_ACCEPT')
+			if accept and accept.find('text/event-stream') != -1:
+				sse = True
+
+		if sse:
 			last_id = request.META.get('Last-Event-ID')
 			if not last_id:
 				last_id = request.GET.get('lastEventId')
@@ -70,16 +82,31 @@ def document_changes(request, document_id):
 			doc = Document.objects.get(eid=document_id)
 			changes = DocumentChange.objects.filter(
 				document=doc,
-				version__gt=after).order_by('version')[:100]
+				version__gt=after).order_by('version')[:50]
 			out = [c.export() for c in changes]
+			if len(out) > 0:
+				last_version = out[-1]['version']
+			else:
+				last_version = after
 		except Document.DoesNotExist:
 			out = []
+			last_version = 0
 
 		if sse:
 			body = ''
 			for i in out:
-				body += 'event: change\nid: %d\ndata: %s\n\n' % (i['version'], json.dumps(i))
-			return HttpResponse(body, content_type='text/event-stream')
+				event = 'id: %d\nevent: change\ndata: %s\n\n' % (
+					i['version'], json.dumps(i))
+				body += event
+			resp = HttpResponse(body, content_type='text/event-stream')
+			parsed = urlparse.urlparse(reverse('document-changes', args=[document_id]))
+			resp['Grip-Link'] = '<%s?sse=true&after=%d>; rel=next' % (
+				parsed.path, last_version)
+			if len(out) < 50:
+				resp['Grip-Hold'] = 'stream'
+				resp['Grip-Channel'] = 'document-%s; prev-id=%s' % (
+					document_id, last_version)
+			return resp
 		else:
 			return JsonResponse({'changes': out})
 	elif request.method == 'POST':
@@ -94,6 +121,7 @@ def document_changes(request, document_id):
 		parent_version = int(request.POST['parent-version'])
 		doc = _doc_get_or_create(document_id)
 
+		saved = False
 		with transaction.atomic():
 			doc = Document.objects.select_for_update().get(id=doc.id)
 			try:
@@ -123,7 +151,17 @@ def document_changes(request, document_id):
 				doc.content = op(doc.content)
 				doc.version = next_version
 				doc.save()
+				saved = True
 
-		return JsonResponse({'id': c.version})
+		if saved:
+			event = 'id: %d\nevent: change\ndata: %s\n\n' % (
+				c.version, json.dumps(c.export()))
+			publish(
+				'document-%s' % document_id,
+				HttpStreamFormat(event),
+				id=str(c.version),
+				prev_id=str(c.version - 1))
+
+		return JsonResponse({'version': c.version})
 	else:
 		return HttpResponseNotAllowed(['GET', 'POST'])

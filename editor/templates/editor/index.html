@@ -1,0 +1,147 @@
+{% load staticfiles %}
+<html>
+  <head>
+    <link rel="stylesheet" href="{% static 'editor/codemirror.css' %}" />
+    <script src="{% static 'editor/jquery-3.1.1.min.js' %}"></script>
+    <script src="{% static 'editor/codemirror.js' %}"></script>
+    <script src="{% static 'editor/ot.js' %}"></script>
+    <script>
+      var POLL_INTERVAL = 5000;
+      var SEND_DELAY = 100;
+      var ERROR_DELAY = 5000;
+
+      var userId = '{{ user_id }}';
+      var documentId = 'test';
+      var cm;
+      var currentVersion = null;
+      var needVersion = null;
+      var pendingOp = null;
+      var sending = false;
+      var sendingOp = null;
+      var ignoreLocalChanges = false;
+
+      var baseUri = '/api/documents/' + documentId;
+
+      var poll = function() {
+        $.get({
+          url: baseUri + '/changes/',
+          data: {
+            after: currentVersion
+          },
+          dataType: 'json'
+        }).done(function (data) {
+          for(var i = 0; i < data.changes.length; ++i) {
+            handleRemoteChange(data.changes[i]);
+          }
+          setTimeout(poll, POLL_INTERVAL);
+        }).fail(function () {
+          // try again later
+          setTimeout(poll, ERROR_DELAY);
+        });
+      };
+
+      var handleRemoteChange = function (change) {
+        ignoreLocalChanges = true;
+        if(change.author != userId) {
+          var op = ot.TextOperation.fromJSON(change.op);
+          console.log('remote change: ' + JSON.stringify(op.ops));
+          if(pendingOp) {
+            var result = ot.TextOperation.transform(op, pendingOp);
+            op = result[0];
+            pendingOp = result[1];
+          }
+          var pos = 0;
+          for(var i = 0; i < op.ops.length; ++i) {
+            var subop = op.ops[i];
+            if(ot.TextOperation.isRetain(subop)) {
+              pos += subop;
+            } else if(ot.TextOperation.isInsert(subop)) {
+              cm.replaceRange(subop, cm.posFromIndex(pos));
+            } else if(ot.TextOperation.isDelete(subop)) {
+              cm.replaceRange('', cm.posFromIndex(pos), cm.posFromIndex(pos - subop));
+            }
+          }
+        }
+        ignoreLocalChanges = false;
+        currentVersion = change.version;
+        if(needVersion != null && currentVersion >= needVersion) {
+          needVersion = null;
+          if(pendingOp && !sending) {
+            sending = true;
+            setTimeout(send, SEND_DELAY);
+          }
+        }
+      };
+
+      var send = function() {
+        if(!sendingOp && pendingOp) {
+          sendingOp = pendingOp;
+          pendingOp = null;
+        }
+        $.post({
+          url: baseUri + '/changes/',
+          data: {
+            user: userId,
+            op: JSON.stringify(sendingOp.ops),
+            'parent-version': currentVersion
+          },
+          dataType: 'json'
+        }).done(function (data) {
+          sending = false;
+          sendingOp = null;
+          if(data.version > currentVersion) {
+            needVersion = data.version;
+          }
+        }).fail(function () {
+          // try again later
+          setTimeout(send, ERROR_DELAY);
+        });
+      };
+
+      $(document).ready(function () {
+        cm = CodeMirror.fromTextArea($('#content').get(0), {
+          lineNumbers: true,
+          lineWrapping: true
+        });
+
+        $.get({
+          url: baseUri + '/',
+          dataType: 'json'
+        }).done(function (data) {
+          cm.setValue(data.content);
+          currentVersion = data.version;
+
+          cm.on('changes', function (cm, changes) {
+            if(ignoreLocalChanges) {
+              return;
+            }
+            var operation = ot.CodeMirrorAdapter.operationFromCodeMirrorChanges(changes, cm)[0];
+            console.log('local change: ' + JSON.stringify(operation.ops));
+            if(pendingOp) {
+              pendingOp = pendingOp.compose(operation);
+            } else {
+              pendingOp = operation;
+            }
+            if(needVersion == null && !sending) {
+              sending = true;
+              setTimeout(send, SEND_DELAY);
+            }
+          });
+
+          var es = new EventSource(baseUri + '/changes/?after=' + currentVersion);
+          es.addEventListener('change', function (e) {
+            var data = JSON.parse(e.data);
+            handleRemoteChange(data);
+          });
+
+          //setTimeout(poll, POLL_INTERVAL);
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <div>
+      <textarea id="content"></textarea>
+    </div>
+  </body>
+</html>
