@@ -34,24 +34,6 @@
         return out;
       };
 
-      var poll = function() {
-        $.get({
-          url: baseUri + '/changes/',
-          data: {
-            after: currentVersion
-          },
-          dataType: 'json'
-        }).done(function (data) {
-          for(var i = 0; i < data.changes.length; ++i) {
-            handleRemoteChange(data.changes[i]);
-          }
-          setTimeout(poll, POLL_INTERVAL);
-        }).fail(function () {
-          // try again later
-          setTimeout(poll, ERROR_DELAY);
-        });
-      };
-
       var handleRemoteChange = function (change) {
         var op = ot.TextOperation.fromJSON(change.op);
         console.log('remote change: ' + JSON.stringify(op.ops));
@@ -147,8 +129,6 @@
           var data = JSON.parse(e.data);
           handleRemoteChange(data);
         });
-
-        //setTimeout(poll, POLL_INTERVAL);
 
         $('#input').removeAttr('disabled');
       });
