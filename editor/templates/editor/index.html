@@ -11,13 +11,13 @@
       var ERROR_DELAY = 5000;
 
       var documentId = '{{ document_id }}';
-      var userId = null;
       var cm = null;
       var currentVersion = null;
       var needVersion = null;
       var pendingOp = null;
       var sending = false;
       var sendingOp = null;
+      var sendingReqId = null;
       var ignoreLocalChanges = false;
 
       var baseUri = '/api/documents/' + documentId;
@@ -50,15 +50,16 @@
       };
 
       var handleRemoteChange = function (change) {
-        ignoreLocalChanges = true;
-        if(change.author != userId) {
-          var op = ot.TextOperation.fromJSON(change.op);
-          console.log('remote change: ' + JSON.stringify(op.ops));
+        var op = ot.TextOperation.fromJSON(change.op);
+        console.log('remote change: ' + JSON.stringify(op.ops));
+
+        if(needVersion == null || change.version != needVersion) {
           if(pendingOp) {
             var result = ot.TextOperation.transform(op, pendingOp);
             op = result[0];
             pendingOp = result[1];
           }
+          ignoreLocalChanges = true;
           var pos = 0;
           for(var i = 0; i < op.ops.length; ++i) {
             var subop = op.ops[i];
@@ -70,8 +71,9 @@
               cm.replaceRange('', cm.posFromIndex(pos), cm.posFromIndex(pos - subop));
             }
           }
+          ignoreLocalChanges = false;
         }
-        ignoreLocalChanges = false;
+
         currentVersion = change.version;
         if(needVersion != null && currentVersion >= needVersion) {
           needVersion = null;
@@ -85,19 +87,21 @@
       var send = function() {
         if(!sendingOp && pendingOp) {
           sendingOp = pendingOp;
+          sendingReqId = makeId();
           pendingOp = null;
         }
         $.post({
           url: baseUri + '/changes/',
           data: {
-            user: userId,
-            op: JSON.stringify(sendingOp.ops),
-            'parent-version': currentVersion
+            'request-id': sendingReqId,
+            'parent-version': currentVersion,
+            op: JSON.stringify(sendingOp.ops)
           },
           dataType: 'json'
         }).done(function (data) {
           sending = false;
           sendingOp = null;
+          sendingReqId = null;
           if(data.version > currentVersion) {
             needVersion = data.version;
           }
@@ -115,50 +119,39 @@
           lineWrapping: true
         });
 
-        var username = makeId();
-        $.post({
-          url: '/api/users/',
-          data: {
-            name: username
-          },
+        $.get({
+          url: baseUri + '/',
           dataType: 'json'
         }).done(function (data) {
-          userId = data.id;
+          cm.setValue(data.content);
+          currentVersion = data.version;
 
-          $.get({
-            url: baseUri + '/',
-            dataType: 'json'
-          }).done(function (data) {
-            cm.setValue(data.content);
-            currentVersion = data.version;
-
-            cm.on('changes', function (cm, changes) {
-              if(ignoreLocalChanges) {
-                return;
-              }
-              var operation = ot.CodeMirrorAdapter.operationFromCodeMirrorChanges(changes, cm)[0];
-              console.log('local change: ' + JSON.stringify(operation.ops));
-              if(pendingOp) {
-                pendingOp = pendingOp.compose(operation);
-              } else {
-                pendingOp = operation;
-              }
-              if(needVersion == null && !sending) {
-                sending = true;
-                setTimeout(send, SEND_DELAY);
-              }
-            });
-
-            var es = new EventSource(baseUri + '/changes/?after=' + currentVersion);
-            es.addEventListener('change', function (e) {
-              var data = JSON.parse(e.data);
-              handleRemoteChange(data);
-            });
-
-            //setTimeout(poll, POLL_INTERVAL);
-
-            $('#input').removeAttr('disabled');
+          cm.on('changes', function (cm, changes) {
+            if(ignoreLocalChanges) {
+              return;
+            }
+            var operation = ot.CodeMirrorAdapter.operationFromCodeMirrorChanges(changes, cm)[0];
+            console.log('local change: ' + JSON.stringify(operation.ops));
+            if(pendingOp) {
+              pendingOp = pendingOp.compose(operation);
+            } else {
+              pendingOp = operation;
+            }
+            if(needVersion == null && !sending) {
+              sending = true;
+              setTimeout(send, SEND_DELAY);
+            }
           });
+
+          var es = new EventSource(baseUri + '/changes/?after=' + currentVersion);
+          es.addEventListener('change', function (e) {
+            var data = JSON.parse(e.data);
+            handleRemoteChange(data);
+          });
+
+          //setTimeout(poll, POLL_INTERVAL);
+
+          $('#input').removeAttr('disabled');
         });
       });
     </script>
@@ -168,5 +161,6 @@
     <div id="input">
       <textarea id="content"></textarea>
     </div>
+    <p>Start another document by browsing to <code>{{ base_url }}/{any-string}</code> .</p>
   </body>
 </html>

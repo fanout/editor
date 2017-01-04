@@ -23,7 +23,16 @@ def _doc_get_or_create(eid):
 def index(request, document_id=None):
 	if not document_id:
 		document_id = 'default'
-	context = {'document_id': document_id}
+	base_url = '%s://%s%s' % (
+		'https' if request.is_secure() else 'http',
+		request.META.get('HTTP_HOST') or 'localhost',
+		reverse('index-default'))
+	if base_url.endswith('/'):
+		base_url = base_url[:-1]
+	context = {
+		'document_id': document_id,
+		'base_url': base_url
+	}
 	return render(request, 'editor/index.html', context)
 
 def users(request):
@@ -140,7 +149,7 @@ def document_changes(request, document_id):
 
 		op = TextOperation(opdata)
 
-		user = get_object_or_404(User, id=request.POST['user'])
+		request_id = request.POST['request-id']
 		parent_version = int(request.POST['parent-version'])
 		doc = _doc_get_or_create(document_id)
 
@@ -151,7 +160,7 @@ def document_changes(request, document_id):
 				# already submitted?
 				c = DocumentChange.objects.get(
 					document=doc,
-					author=user,
+					request_id=request_id,
 					parent_version=parent_version)
 			except DocumentChange.DoesNotExist:
 				changes_since = DocumentChange.objects.filter(
@@ -167,7 +176,7 @@ def document_changes(request, document_id):
 				c = DocumentChange(
 					document=doc,
 					version=next_version,
-					author=user,
+					request_id=request_id,
 					parent_version=parent_version,
 					data=json.dumps(op.ops))
 				c.save()

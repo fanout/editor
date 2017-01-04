@@ -29,21 +29,20 @@ class Document(models.Model):
 class DocumentChange(models.Model):
 	document = models.ForeignKey(Document)
 	version = models.IntegerField(default=0, db_index=True)
+	request_id = models.CharField(max_length=64, unique=True)
 	time = models.DateTimeField(auto_now_add=True, db_index=True)
-	author = models.ForeignKey(User)
 	parent_version = models.IntegerField(default=0)
 	data = models.TextField()
 
 	class Meta:
 		unique_together = (
 			('document', 'version'),
-			('document', 'author', 'parent_version'),
+			('document', 'request_id', 'parent_version'),
 		)
 
 	def export(self):
 		out = {}
 		out['version'] = self.version
 		out['time'] = self.time.isoformat()
-		out['author'] = unicode(self.author.id)
 		out['op'] = json.loads(self.data)
 		return out
