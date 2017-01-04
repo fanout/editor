@@ -20,9 +20,6 @@ def _doc_get_or_create(eid):
 			doc = Document.objects.get(eid=eid)
 	return doc
 
-#def index(request):
-#	return render(request, 'editor/index.html', {'user_id': request.GET['user-id']})
-
 def index(request, document_id=None):
 	if not document_id:
 		document_id = 'default'
