@@ -10,9 +10,9 @@
       var SEND_DELAY = 100;
       var ERROR_DELAY = 5000;
 
-      var userId = '{{ user_id }}';
       var documentId = '{{ document_id }}';
-      var cm;
+      var userId = null;
+      var cm = null;
       var currentVersion = null;
       var needVersion = null;
       var pendingOp = null;
@@ -21,6 +21,15 @@
       var ignoreLocalChanges = false;
 
       var baseUri = '/api/documents/' + documentId;
+
+      var makeId = function () {
+        var out = '';
+        var possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        for(var i = 0; i < 16; ++i) {
+          out += possible.charAt(Math.floor(Math.random() * possible.length));
+        }
+        return out;
+      };
 
       var poll = function() {
         $.get({
@@ -99,48 +108,64 @@
       };
 
       $(document).ready(function () {
+        $('#input').attr('disabled', true);
+
         cm = CodeMirror.fromTextArea($('#content').get(0), {
           lineNumbers: true,
           lineWrapping: true
         });
 
-        $.get({
-          url: baseUri + '/',
+        var username = makeId();
+        $.post({
+          url: '/api/users/',
+          data: {
+            name: username
+          },
           dataType: 'json'
         }).done(function (data) {
-          cm.setValue(data.content);
-          currentVersion = data.version;
+          userId = data.id;
 
-          cm.on('changes', function (cm, changes) {
-            if(ignoreLocalChanges) {
-              return;
-            }
-            var operation = ot.CodeMirrorAdapter.operationFromCodeMirrorChanges(changes, cm)[0];
-            console.log('local change: ' + JSON.stringify(operation.ops));
-            if(pendingOp) {
-              pendingOp = pendingOp.compose(operation);
-            } else {
-              pendingOp = operation;
-            }
-            if(needVersion == null && !sending) {
-              sending = true;
-              setTimeout(send, SEND_DELAY);
-            }
+          $.get({
+            url: baseUri + '/',
+            dataType: 'json'
+          }).done(function (data) {
+            cm.setValue(data.content);
+            currentVersion = data.version;
+
+            cm.on('changes', function (cm, changes) {
+              if(ignoreLocalChanges) {
+                return;
+              }
+              var operation = ot.CodeMirrorAdapter.operationFromCodeMirrorChanges(changes, cm)[0];
+              console.log('local change: ' + JSON.stringify(operation.ops));
+              if(pendingOp) {
+                pendingOp = pendingOp.compose(operation);
+              } else {
+                pendingOp = operation;
+              }
+              if(needVersion == null && !sending) {
+                sending = true;
+                setTimeout(send, SEND_DELAY);
+              }
+            });
+
+            var es = new EventSource(baseUri + '/changes/?after=' + currentVersion);
+            es.addEventListener('change', function (e) {
+              var data = JSON.parse(e.data);
+              handleRemoteChange(data);
+            });
+
+            //setTimeout(poll, POLL_INTERVAL);
+
+            $('#input').removeAttr('disabled');
           });
-
-          var es = new EventSource(baseUri + '/changes/?after=' + currentVersion);
-          es.addEventListener('change', function (e) {
-            var data = JSON.parse(e.data);
-            handleRemoteChange(data);
-          });
-
-          //setTimeout(poll, POLL_INTERVAL);
         });
       });
     </script>
   </head>
   <body>
-    <div>
+    <h1>{{ document_id }}</h1>
+    <div id="input">
       <textarea id="content"></textarea>
     </div>
   </body>

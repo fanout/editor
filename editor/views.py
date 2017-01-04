@@ -23,7 +23,7 @@ def _doc_get_or_create(eid):
 def index(request, document_id=None):
 	if not document_id:
 		document_id = 'default'
-	context = {'document_id': document_id, 'user_id': request.GET['user-id']}
+	context = {'document_id': document_id}
 	return render(request, 'editor/index.html', context)
 
 def users(request):
