@@ -20,17 +20,40 @@ def _doc_get_or_create(eid):
 			doc = Document.objects.get(eid=eid)
 	return doc
 
+def _escape(s):
+	out = ''
+	for c in s:
+		if c == '\n':
+			out += '\\n'
+		elif c == '\r':
+			out += '\\r'
+		elif c == '\t':
+			out += '\\t'
+		else:
+			out += c
+	return out
+
 def index(request, document_id=None):
 	if not document_id:
 		document_id = 'default'
+
 	base_url = '%s://%s%s' % (
 		'https' if request.is_secure() else 'http',
 		request.META.get('HTTP_HOST') or 'localhost',
 		reverse('index-default'))
 	if base_url.endswith('/'):
 		base_url = base_url[:-1]
+
+	try:
+		doc = Document.objects.get(eid=document_id)
+	except Document.DoesNotExist:
+		doc = Document(eid=document_id)
+
 	context = {
 		'document_id': document_id,
+		'document_title': doc.title,
+		'document_content': _escape(doc.content),
+		'document_version': doc.version,
 		'base_url': base_url
 	}
 	return render(request, 'editor/index.html', context)
