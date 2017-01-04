@@ -20,8 +20,14 @@ def _doc_get_or_create(eid):
 			doc = Document.objects.get(eid=eid)
 	return doc
 
-def index(request):
-	return render(request, 'editor/index.html', {'user_id': request.GET['user-id']})
+#def index(request):
+#	return render(request, 'editor/index.html', {'user_id': request.GET['user-id']})
+
+def index(request, document_id=None):
+	if not document_id:
+		document_id = 'default'
+	context = {'document_id': document_id, 'user_id': request.GET['user-id']}
+	return render(request, 'editor/index.html', context)
 
 def users(request):
 	if request.method == 'POST':
@@ -65,30 +71,50 @@ def document_changes(request, document_id):
 			if accept and accept.find('text/event-stream') != -1:
 				sse = True
 
-		if sse:
+		after = None
+
+		grip_last = request.META.get('HTTP_GRIP_LAST')
+		if grip_last:
+			at = grip_last.find('last-id=')
+			if at == -1:
+				raise ValueError('invalid Grip-Last header')
+			at += 8
+			after = int(grip_last[at:])
+
+		if after is None and sse:
 			last_id = request.META.get('Last-Event-ID')
-			if not last_id:
-				last_id = request.GET.get('lastEventId')
-				if not last_id:
-					last_id = request.GET.get('after')
-					if not last_id:
-						raise ValueError(
-							'client must include last event id or after')
-			after = int(last_id)
-		else:
-			after = int(request.GET['after'])
+			if last_id:
+				after = int(last_id)
+
+		if after is None and sse:
+			last_id = request.GET.get('lastEventId')
+			if last_id:
+				after = int(last_id)
+
+		if after is None:
+			afterstr = request.GET.get('after')
+			if afterstr:
+				after = int(afterstr)
 
 		try:
 			doc = Document.objects.get(eid=document_id)
-			changes = DocumentChange.objects.filter(
-				document=doc,
-				version__gt=after).order_by('version')[:50]
-			out = [c.export() for c in changes]
-			if len(out) > 0:
-				last_version = out[-1]['version']
+			if after is not None:
+				if after > doc.version:
+					raise ValueError('version in the future')
+				changes = DocumentChange.objects.filter(
+					document=doc,
+					version__gt=after).order_by('version')[:50]
+				out = [c.export() for c in changes]
+				if len(out) > 0:
+					last_version = out[-1]['version']
+				else:
+					last_version = after
 			else:
-				last_version = after
+				out = []
+				last_version = doc.version
 		except Document.DoesNotExist:
+			if after is not None and after > 0:
+				raise ValueError('version in the future')
 			out = []
 			last_version = 0
 
