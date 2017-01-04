@@ -41,4 +41,4 @@ curl -d name=alice http://localhost:8000/users/
 curl -d name=bob http://localhost:8000/users/
 ```
 
-Then open up two browser windows, and set `user-id` in the query string. E.g. http://localhost:7999/?user-id=1 and http://localhost:7999/?user-id=2
+Then open up two browser windows with `user-id` set. E.g. [http://localhost:7999/?user-id=1](http://localhost:7999/?user-id=1) and [http://localhost:7999/?user-id=2](http://localhost:7999/?user-id=1).
