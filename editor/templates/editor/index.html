@@ -18,6 +18,7 @@
       var sending = false;
       var sendingOp = null;
       var sendingReqId = null;
+      var pendingRemoteChanges = [];
       var ignoreLocalChanges = false;
 
       var documentInitialContent = '{{ document_content }}';
@@ -35,6 +36,16 @@
       };
 
       var handleRemoteChange = function (change) {
+        // don't apply remote ops if we've started sending
+        if(sendingOp) {
+          pendingRemoteChanges.push(change);
+          return;
+        }
+
+        applyRemoteChange(change);
+      }
+
+      var applyRemoteChange = function (change) {
         var op = ot.TextOperation.fromJSON(change.op);
         console.log('remote change: ' + JSON.stringify(op.ops));
 
@@ -89,6 +100,11 @@
           sendingReqId = null;
           if(data.version > currentVersion) {
             needVersion = data.version;
+          }
+          while(pendingRemoteChanges.length > 0) {
+            var change = pendingRemoteChanges[0];
+            applyRemoteChange(change);
+            pendingRemoteChanges = pendingRemoteChanges.slice(1);
           }
         }).fail(function () {
           // try again later
