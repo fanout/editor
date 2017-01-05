@@ -25,7 +25,7 @@ SECRET_KEY = 'vec+qkao$8j^$t_at!-zmy!o$%onw4=q+**(sob$ps5f6$+h5a'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -119,6 +119,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = 'staticfiles'
 
 from gripcontrol import parse_grip_uri
 
