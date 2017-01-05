@@ -63,6 +63,7 @@
               pos += subop;
             } else if(ot.TextOperation.isInsert(subop)) {
               cm.replaceRange(subop, cm.posFromIndex(pos));
+              pos += subop.length;
             } else if(ot.TextOperation.isDelete(subop)) {
               cm.replaceRange('', cm.posFromIndex(pos), cm.posFromIndex(pos - subop));
             }
