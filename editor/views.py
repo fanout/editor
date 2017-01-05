@@ -1,7 +1,8 @@
 import json
 import urlparse
 from django.db import transaction, IntegrityError
-from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
+from django.http import HttpResponse, HttpResponseBadRequest, \
+	HttpResponseNotAllowed, HttpResponseNotFound, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from gripcontrol import HttpStreamFormat
@@ -131,7 +132,7 @@ def document_changes(request, document_id):
 			doc = Document.objects.get(eid=document_id)
 			if after is not None:
 				if after > doc.version:
-					raise ValueError('version in the future')
+					return HttpResponseNotFound('version in the future')
 				changes = DocumentChange.objects.filter(
 					document=doc,
 					version__gt=after).order_by('version')[:50]
@@ -145,7 +146,7 @@ def document_changes(request, document_id):
 				last_version = doc.version
 		except Document.DoesNotExist:
 			if after is not None and after > 0:
-				raise ValueError('version in the future')
+				return HttpResponseNotFound('version in the future')
 			out = []
 			last_version = 0
 
@@ -173,7 +174,7 @@ def document_changes(request, document_id):
 		opdata = json.loads(request.POST['op'])
 		for i in opdata:
 			if not isinstance(i, int) and not isinstance(i, basestring):
-				raise ValueError('invalid operation')
+				return HttpResponseBadRequest('invalid operation');
 
 		op = TextOperation(opdata)
 
@@ -198,7 +199,18 @@ def document_changes(request, document_id):
 
 				for c in changes_since:
 					op2 = TextOperation(json.loads(c.data))
-					op, _ = TextOperation.transform(op, op2)
+					try:
+						op, _ = TextOperation.transform(op, op2)
+					except:
+						return HttpResponseBadRequest(
+							'unable to transform against version %d' % c.version)
+
+				try:
+					doc.content = op(doc.content)
+				except:
+					return HttpResponseBadRequest(
+						'unable to apply %s to version %d' % (
+						json.dumps(op.ops), doc.version))
 
 				next_version = doc.version + 1
 				c = DocumentChange(
@@ -208,7 +220,6 @@ def document_changes(request, document_id):
 					parent_version=parent_version,
 					data=json.dumps(op.ops))
 				c.save()
-				doc.content = op(doc.content)
 				doc.version = next_version
 				doc.save()
 				saved = True
