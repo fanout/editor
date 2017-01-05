@@ -9,9 +9,11 @@
       var POLL_INTERVAL = 5000;
       var SEND_DELAY = 100;
       var ERROR_DELAY = 5000;
+      var STREAM_TIMEOUT = 30000;
 
       var documentId = '{{ document_id }}';
       var cm = null;
+      var es = null;
       var currentVersion = null;
       var needVersion = null;
       var pendingOp = null;
@@ -20,6 +22,7 @@
       var sendingReqId = null;
       var pendingRemoteChanges = [];
       var ignoreLocalChanges = false;
+      var streamTimeoutTimer = null;
 
       var documentInitialContent = '{{ document_content }}';
       var documentInitialVersion = {{ document_version }};
@@ -50,7 +53,7 @@
 
         var fromSelf = (needVersion != null && change.version == needVersion);
 
-        var logMsg = 'remote change: ' + JSON.stringify(op.ops);
+        var logMsg = 'remote change: ' + change.version + ' ' + JSON.stringify(op.ops);
         if(fromSelf) {
           logMsg += ' (ignoring)';
         }
@@ -120,6 +123,52 @@
         });
       };
 
+      var streamConnect = function () {
+        if(es != null) {
+          es.close();
+        }
+
+        console.log('stream connecting...');
+
+        es = new EventSource(baseUri + '/changes/?after=' + currentVersion);
+        es.addEventListener('opened', function () {
+          console.log('stream connected');
+        });
+        es.addEventListener('change', function (e) {
+          refreshTimeout();
+          var data = JSON.parse(e.data);
+          handleRemoteChange(data);
+        });
+        es.addEventListener('keep-alive', function () {
+          refreshTimeout();
+        });
+        es.addEventListener('error', function () {
+          if(streamTimeoutTimer != null) {
+            clearTimeout(streamTimeoutTimer);
+            streamTimeoutTimer = null;
+          }
+          es.close();
+          es = null;
+          console.log('stream error, will reconnect shortly');
+          setTimeout(streamConnect, ERROR_DELAY);
+        });
+
+        refreshTimeout();
+      };
+
+      var refreshTimeout = function () {
+        if(streamTimeoutTimer != null) {
+          clearTimeout(streamTimeoutTimer);
+        }
+        streamTimeoutTimer = setTimeout(function () {
+          streamTimeoutTimer = null;
+          es.close();
+          es = null;
+          console.log('stream timeout, will reconnect shortly');
+          setTimeout(streamConnect, ERROR_DELAY);
+        }, STREAM_TIMEOUT);
+      };
+
       $(document).ready(function () {
         $('#input').attr('disabled', true);
 
@@ -148,11 +197,7 @@
           }
         });
 
-        var es = new EventSource(baseUri + '/changes/?after=' + currentVersion);
-        es.addEventListener('change', function (e) {
-          var data = JSON.parse(e.data);
-          handleRemoteChange(data);
-        });
+        streamConnect();
 
         $('#input').removeAttr('disabled');
       });
