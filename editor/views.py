@@ -57,7 +57,10 @@ def index(request, document_id=None):
 		'document_version': doc.version,
 		'base_url': base_url
 	}
-	return render(request, 'editor/index.html', context)
+
+	resp = render(request, 'editor/index.html', context)
+	resp['Cache-Control'] = 'no-store, must-revalidate'
+	return resp
 
 def users(request):
 	if request.method == 'POST':
@@ -87,7 +90,9 @@ def document(request, document_id):
 			doc = Document.objects.get(eid=document_id)
 		except Document.DoesNotExist:
 			doc = Document(eid=document_id)
-		return JsonResponse(doc.export())
+		resp = JsonResponse(doc.export())
+		resp['Cache-Control'] = 'no-store, must-revalidate'
+		return resp
 	else:
 		return HttpResponseNotAllowed(['GET'])
 
