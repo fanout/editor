@@ -40,13 +40,18 @@
 
       var handleRemoteChange = function (change) {
         // don't apply remote ops if we've started sending
-        if(sendingOp) {
+        if(sendingReqId) {
           pendingRemoteChanges.push(change);
           return;
         }
 
         applyRemoteChange(change);
-      }
+
+        if(pendingOp && needVersion == null && !sending) {
+          sending = true;
+          setTimeout(send, SEND_DELAY);
+        }
+      };
 
       var applyRemoteChange = function (change) {
         var op = ot.TextOperation.fromJSON(change.op);
@@ -60,7 +65,14 @@
         console.log(logMsg);
 
         if(!fromSelf) {
+          if(sendingOp) {
+            console.log('transforming with sendingOp: ' + JSON.stringify(sendingOp.ops));
+            var result = ot.TextOperation.transform(op, sendingOp);
+            op = result[0];
+            sendingOp = result[1]; // we won't send this again
+          }
           if(pendingOp) {
+            console.log('transforming with pendingOp: ' + JSON.stringify(pendingOp.ops));
             var result = ot.TextOperation.transform(op, pendingOp);
             op = result[0];
             pendingOp = result[1];
@@ -84,15 +96,12 @@
         currentVersion = change.version;
         if(needVersion != null && currentVersion >= needVersion) {
           needVersion = null;
-          if(pendingOp && !sending) {
-            sending = true;
-            setTimeout(send, SEND_DELAY);
-          }
+          sendingOp = null;
         }
       };
 
       var send = function() {
-        if(!sendingOp && pendingOp) {
+        if(!sendingReqId && pendingOp) {
           sendingOp = pendingOp;
           sendingReqId = makeId();
           pendingOp = null;
@@ -107,19 +116,30 @@
           dataType: 'json'
         }).done(function (data) {
           sending = false;
-          sendingOp = null;
           sendingReqId = null;
-          if(data.version > currentVersion) {
-            needVersion = data.version;
+          if(data.version <= currentVersion) {
+            // we don't process remote changes while sending,
+            //   so the sent change MUST be later than the
+            //   last received change
+            throw 'integrity error: send ack went backwards';
           }
+          needVersion = data.version;
           while(pendingRemoteChanges.length > 0) {
             var change = pendingRemoteChanges[0];
             applyRemoteChange(change);
             pendingRemoteChanges = pendingRemoteChanges.slice(1);
           }
-        }).fail(function () {
-          // try again later
-          setTimeout(send, ERROR_DELAY);
+          if(pendingOp && needVersion == null) {
+            sending = true;
+            setTimeout(send, SEND_DELAY);
+          }
+        }).fail(function (xhr) {
+          if(xhr.status == 0 || (xhr.status >= 500 && xhr.status < 599)) {
+            // try again later
+            setTimeout(send, ERROR_DELAY);
+            return;
+          }
+          alert('sync error');
         });
       };
 
