@@ -92,8 +92,10 @@ def document(request, document_id):
 
 def document_changes(request, document_id):
 	if request.method == 'GET':
+		link = False
 		sse = False
-		if request.GET.get('sse') == 'true':
+		if request.GET.get('link') == 'true':
+			link = True
 			sse = True
 		else:
 			accept = request.META.get('HTTP_ACCEPT')
@@ -149,18 +151,21 @@ def document_changes(request, document_id):
 
 		if sse:
 			body = ''
+			if not link:
+				body += 'event: opened\ndata:\n\n'
 			for i in out:
 				event = 'id: %d\nevent: change\ndata: %s\n\n' % (
 					i['version'], json.dumps(i))
 				body += event
 			resp = HttpResponse(body, content_type='text/event-stream')
 			parsed = urlparse.urlparse(reverse('document-changes', args=[document_id]))
-			resp['Grip-Link'] = '<%s?sse=true&after=%d>; rel=next' % (
+			resp['Grip-Link'] = '<%s?link=true&after=%d>; rel=next' % (
 				parsed.path, last_version)
 			if len(out) < 50:
 				resp['Grip-Hold'] = 'stream'
 				resp['Grip-Channel'] = 'document-%s; prev-id=%s' % (
 					document_id, last_version)
+				resp['Grip-Keep-Alive'] = 'event: keep-alive\\ndata:\\n\\n; format=cstring; timeout=20'
 			return resp
 		else:
 			return JsonResponse({'changes': out})
