@@ -34,11 +34,4 @@ Run the server:
 python manage.py runserver
 ```
 
-Create a couple of users:
-
-```sh
-curl -d name=alice http://localhost:8000/users/
-curl -d name=bob http://localhost:8000/users/
-```
-
-Then open up two browser windows with `user-id` set. E.g. [http://localhost:7999/?user-id=1](http://localhost:7999/?user-id=1) and [http://localhost:7999/?user-id=2](http://localhost:7999/?user-id=1).
+Then open up two browser windows to [http://localhost:7999/](http://localhost:7999/).
