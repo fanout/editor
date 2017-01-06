@@ -8,6 +8,8 @@ Client textarea uses CodeMirror.
 
 Server is a Django app. Updates are sent over Pushpin.
 
+There is a public instance available here: [http://editor.fanoutapp.com](http://editor.fanoutapp.com).
+
 ## Usage
 
 Setup, from the base dir:
