@@ -24,7 +24,7 @@
       var ignoreLocalChanges = false;
       var streamTimeoutTimer = null;
 
-      var documentInitialContent = '{{ document_content }}';
+      var documentInitialContent = '{{ document_content|safe }}';
       var documentInitialVersion = {{ document_version }};
 
       var baseUri = '/api/documents/' + documentId;

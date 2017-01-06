@@ -30,6 +30,10 @@ def _escape(s):
 			out += '\\r'
 		elif c == '\t':
 			out += '\\t'
+		elif c == '\'':
+			out += '\\\''
+		elif c == '"':
+			out += '\\"'
 		else:
 			out += c
 	return out
