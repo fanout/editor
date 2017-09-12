@@ -10,7 +10,7 @@
       var ERROR_DELAY = 5000;
       var STREAM_TIMEOUT = 30000;
 
-      var documentId = '{{ document_id }}';
+      var documentId = '{{ document_id|escapejs }}';
       var cm = null;
       var es = null;
       var currentVersion = null;
@@ -23,7 +23,7 @@
       var ignoreLocalChanges = false;
       var streamTimeoutTimer = null;
 
-      var documentInitialContent = '{{ document_content|safe }}';
+      var documentInitialContent = '{{ document_content|escapejs }}';
       var documentInitialVersion = {{ document_version }};
 
       var baseUri = '/api/documents/' + documentId;
