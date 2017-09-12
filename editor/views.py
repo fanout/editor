@@ -21,23 +21,6 @@ def _doc_get_or_create(eid):
 			doc = Document.objects.get(eid=eid)
 	return doc
 
-def _escape(s):
-	out = ''
-	for c in s:
-		if c == '\n':
-			out += '\\n'
-		elif c == '\r':
-			out += '\\r'
-		elif c == '\t':
-			out += '\\t'
-		elif c == '\'':
-			out += '\\\''
-		elif c == '"':
-			out += '\\"'
-		else:
-			out += c
-	return out
-
 def index(request, document_id=None):
 	if not document_id:
 		document_id = 'default'
@@ -57,7 +40,7 @@ def index(request, document_id=None):
 	context = {
 		'document_id': document_id,
 		'document_title': doc.title,
-		'document_content': _escape(doc.content),
+		'document_content': doc.content,
 		'document_version': doc.version,
 		'base_url': base_url
 	}
