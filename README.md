@@ -28,7 +28,7 @@ Note: default storage is sqlite.
 Create a `.env` file containing `GRIP_URL`:
 
 ```sh
-GRIP_URL=http://api.fanout.io/realm/{realm-id}?iss={realm-id}&key=base64:{realm-key}
+GRIP_URL=https://api.fanout.io/realm/{realm-id}?iss={realm-id}&key=base64:{realm-key}
 ```
 
 Be sure to replace `{realm-id}` and `{realm-key}` with the values from the Fanout control panel.
@@ -47,7 +47,7 @@ Run a local instance of the project:
 python manage.py runserver
 ```
 
-Then open up two browser windows to your Fanout Cloud domain (e.g. http://{realm-id}.fanoutcdn.com/). Requests made to Fanout Cloud should be routed through ngrok to the local instance.
+Then open up two browser windows to your Fanout Cloud domain (e.g. https://{realm-id}.fanoutcdn.com/). Requests made to Fanout Cloud should be routed through ngrok to the local instance.
 
 ### Running with Pushpin
 
