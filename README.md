@@ -6,7 +6,7 @@ OT algorithms and code based on [Tim Baumann's project](https://github.com/Opera
 
 Client textarea uses CodeMirror.
 
-Server is a Django app. Updates are sent over Pushpin.
+Server is a Django app. Updates are sent over Fanout Cloud or Pushpin.
 
 There is a public instance available here: [http://editor.fanoutapp.com](http://editor.fanoutapp.com).
 
