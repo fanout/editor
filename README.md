@@ -12,7 +12,7 @@ There is a public instance available here: [http://editor.fanoutapp.com](http://
 
 ## Usage
 
-Setup, from the base dir:
+Install dependencies and setup database:
 
 ```sh
 virtualenv venv
@@ -23,7 +23,7 @@ python manage.py migrate
 
 Note: default storage is sqlite.
 
-## Running with Fanout Cloud
+### Running with Fanout Cloud
 
 Create a `.env` file containing `GRIP_URL`:
 
@@ -49,7 +49,7 @@ python manage.py runserver
 
 Then open up two browser windows to your Fanout Cloud domain (e.g. http://{realm-id}.fanoutcdn.com/). Requests made to Fanout Cloud should be routed through ngrok to the local instance.
 
-## Running with Pushpin
+### Running with Pushpin
 
 Create a `.env` file containing `GRIP_URL`:
 
