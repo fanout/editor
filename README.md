@@ -19,10 +19,43 @@ virtualenv venv
 . venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
-echo GRIP_URL=http://localhost:5561 > .env
 ```
 
 Note: default storage is sqlite.
+
+## Running with Fanout Cloud
+
+Create a `.env` file containing `GRIP_URL`:
+
+```sh
+GRIP_URL=http://api.fanout.io/realm/{realm-id}?iss={realm-id}&key=base64:{realm-key}
+```
+
+Be sure to replace `{realm-id}` and `{realm-key}` with the values from the Fanout control panel.
+
+In a separate shell, run ngrok for local tunneling:
+
+```sh
+ngrok http 8000
+```
+
+In the Fanout control panel, set the ngrok host/port as the Origin Server.
+
+Run a local instance of the project:
+
+```sh
+python manage.py runserver
+```
+
+Then open up two browser windows to your Fanout Cloud domain (e.g. http://{realm-id}.fanoutcdn.com/). Requests made to Fanout Cloud should be routed through ngrok to the local instance.
+
+## Running with Pushpin
+
+Create a `.env` file containing `GRIP_URL`:
+
+```sh
+GRIP_URL=http://localhost:5561
+```
 
 Run Pushpin:
 
