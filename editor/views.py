@@ -5,7 +5,7 @@ from django.http import HttpResponse, HttpResponseBadRequest, \
 	HttpResponseNotAllowed, HttpResponseNotFound, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
-from gripcontrol import HttpStreamFormat
+from gripcontrol import Channel, HttpStreamFormat
 from django_grip import publish
 from text_operation import TextOperation
 from models import User, Document, DocumentChange
@@ -25,7 +25,7 @@ def index(request, document_id=None):
 	if not document_id:
 		document_id = 'default'
 
-	base_url = '%s://%s%s' % (
+	base_url = '{}://{}{}'.format(
 		'https' if request.is_secure() else 'http',
 		request.META.get('HTTP_HOST') or 'localhost',
 		reverse('index-default'))
@@ -84,6 +84,8 @@ def document(request, document_id):
 		return HttpResponseNotAllowed(['GET'])
 
 def document_changes(request, document_id):
+	gchannel = 'document-{}'.format(document_id)
+
 	if request.method == 'GET':
 		link = False
 		sse = False
@@ -97,13 +99,9 @@ def document_changes(request, document_id):
 
 		after = None
 
-		grip_last = request.META.get('HTTP_GRIP_LAST')
-		if grip_last:
-			at = grip_last.find('last-id=')
-			if at == -1:
-				raise ValueError('invalid Grip-Last header')
-			at += 8
-			after = int(grip_last[at:])
+		last_id = request.grip.last.get(gchannel)
+		if last_id:
+			after = int(last_id)
 
 		if after is None and sse:
 			last_id = request.META.get('Last-Event-ID')
@@ -147,18 +145,18 @@ def document_changes(request, document_id):
 			if not link:
 				body += 'event: opened\ndata:\n\n'
 			for i in out:
-				event = 'id: %d\nevent: change\ndata: %s\n\n' % (
+				event = 'id: {}\nevent: change\ndata: {}\n\n'.format(
 					i['version'], json.dumps(i))
 				body += event
 			resp = HttpResponse(body, content_type='text/event-stream')
 			parsed = urlparse.urlparse(reverse('document-changes', args=[document_id]))
-			resp['Grip-Link'] = '<%s?link=true&after=%d>; rel=next' % (
-				parsed.path, last_version)
+			instruct = request.grip.start_instruct()
+			instruct.set_next_link('{}?link=true&after={}'.format(
+				parsed.path, last_version))
 			if len(out) < 50:
-				resp['Grip-Hold'] = 'stream'
-				resp['Grip-Channel'] = 'document-%s; prev-id=%s' % (
-					document_id, last_version)
-				resp['Grip-Keep-Alive'] = 'event: keep-alive\\ndata:\\n\\n; format=cstring; timeout=20'
+				instruct.set_hold_stream()
+				instruct.add_channel(Channel(gchannel, prev_id=str(last_version)))
+				instruct.set_keep_alive('event: keep-alive\ndata:\n\n; format=cstring', 20)
 			return resp
 		else:
 			return JsonResponse({'changes': out})
@@ -195,13 +193,13 @@ def document_changes(request, document_id):
 						op, _ = TextOperation.transform(op, op2)
 					except:
 						return HttpResponseBadRequest(
-							'unable to transform against version %d' % c.version)
+							'unable to transform against version {}'.format(c.version))
 
 				try:
 					doc.content = op(doc.content)
 				except:
 					return HttpResponseBadRequest(
-						'unable to apply %s to version %d' % (
+						'unable to apply {} to version {}'.format(
 						json.dumps(op.ops), doc.version))
 
 				next_version = doc.version + 1
@@ -217,10 +215,10 @@ def document_changes(request, document_id):
 				saved = True
 
 		if saved:
-			event = 'id: %d\nevent: change\ndata: %s\n\n' % (
+			event = 'id: {}\nevent: change\ndata: {}\n\n'.format(
 				c.version, json.dumps(c.export()))
 			publish(
-				'document-%s' % document_id,
+				gchannel,
 				HttpStreamFormat(event),
 				id=str(c.version),
 				prev_id=str(c.version - 1))
